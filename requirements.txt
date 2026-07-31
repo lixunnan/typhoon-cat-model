@@ -1,0 +1,17 @@
+# ============================================================================
+# 台风巨灾风险建模 + 巨灾金融定价 项目依赖
+# Typhoon Catastrophe Risk Model + Catastrophe Risk Financing - dependencies
+# ----------------------------------------------------------------------------
+# 环境约束（task contract）:
+#   解释器 interpreter: /Users/liqiqi/.workbuddy/binaries/python/envs/default/bin/python
+#   仅允许以下 4 个第三方库 + Python 标准库 (numpy / pandas / scipy / matplotlib)
+#   禁止使用系统 python；禁止任何超出下列清单的第三方依赖。
+#
+#   Only the 4 third-party packages below are permitted + the Python stdlib.
+#   Do NOT add packages beyond this list (e.g. no xarray, no cartopy, no seaborn).
+# ============================================================================
+
+numpy>=1.24
+pandas>=1.5
+scipy>=1.10
+matplotlib>=3.6
