@@ -1,6 +1,10 @@
 # 台风巨灾风险建模 + 巨灾金融定价
 # Typhoon Catastrophe Risk Model + Catastrophe Risk Financing
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Online-brightgreen)](https://lixunnan.github.io/typhoon-cat-model/) [![Python](https://img.shields.io/badge/Python-3.13%2B-blue)](https://www.python.org) [![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE) [![Tests](https://img.shields.io/badge/Tests-19%20passed-brightgreen)](https://github.com/lixunnan/typhoon-cat-model)
+
+**在线交互展示 / Live Demo:** https://lixunnan.github.io/typhoon-cat-model/
+
 > 以 2019 年台风"利奇马"(Lekima, 1909) 为校准案例的一套**完整、可复现、端到端**的巨灾风险量化平台。
 > End-to-end, reproducible typhoon catastrophe (CAT) risk modeling and risk-financing platform,
 > calibrated against the 2019 Typhoon Lekima (1909) landfall event.
@@ -182,6 +186,11 @@ typhoon_cat_model/
 ---
 
 ## 6. 运行方式 / How to Run
+
+```bash
+git clone https://github.com/lixunnan/typhoon-cat-model.git
+cd typhoon-cat-model
+```
 
 ```bash
 # 使用受约束的解释器（禁止使用系统 python）
