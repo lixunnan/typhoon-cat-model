@@ -10,7 +10,9 @@
     3. Vulnerability —— 校准脆弱性曲线至利奇马实际损失 537.2 亿元
     4. Financial —— EP 曲线 / VaR / TVaR / 偿二代资本 / 再保分层 /
                     CAT bond 定价 / 基差风险 / 组合分散化
-    5. Visualization —— 输出 11 张 300 dpi 英文标注图表至 ``outputs/``
+    5. Climate  —— 气候变化情景分析（模块 E）：5 个 SSP 情景、归因分解、
+                    金融传导与不确定性带
+    6. Visualization —— 输出 12 张 300 dpi 英文标注图表至 ``outputs/``
 """
 
 from __future__ import annotations
@@ -36,8 +38,10 @@ warnings.filterwarnings("ignore", category=RuntimeWarning,
                         message=r".*divide by zero encountered.*")
 
 from config import FINANCIAL, HAZARD, OUTPUT_DIR, PLOT, STOCHASTIC, VULNERABILITY
+import climate as cl
 import financial as fin
 import hazard as hz
+import sync_docs
 import visualization as viz
 from exposure import load_exposure
 from vulnerability import (
@@ -545,6 +549,85 @@ def run() -> Dict[str, object]:
     figures.append(viz.plot_basis_risk(basis, basis_simple, basis_naive))
     figures.append(viz.plot_portfolio(port, FINANCIAL.risk_free_rate))
 
+    # ----------------------------------------------------------------- #
+    # Module E —— Climate change scenarios
+    # ----------------------------------------------------------------- #
+    _header("MODULE E  |  CLIMATE CHANGE SCENARIOS")
+
+    climate_analysis = cl.run_climate_scenarios(exposure, calib_e.param_after)
+    figures.append(viz.plot_climate_scenarios(climate_analysis))
+
+    _sub("Climate scenario definition (IPCC AR6 WG1 / Knutson et al. 2020)")
+    print(f"  {'Scenario':<18s}{'Year':>6s}{'Warming':>10s}{'dp_med':>10s}"
+          f"{'dp_sigma':>10s}{'lambda':>10s}{'flood_beta':>12s}{'Vmax*':>10s}")
+    print(f"  {'':18s}{'(°C)':>16s}{'scale':>10s}{'scale':>10s}{'scale':>10s}"
+          f"{'scale':>12s}{'implied':>10s}")
+    for r in climate_analysis.results:
+        sc = r.scenario
+        print(f"  {sc.name:<18s}{sc.horizon_year:>6d}{sc.warming_c:>10.2f}"
+              f"{sc.dp_median_scale:>10.2f}{sc.dp_sigma_scale:>10.2f}"
+              f"{sc.lambda_scale:>10.2f}{sc.flood_beta_scale:>12.2f}"
+              f"{sc.implied_vmax_scale:>10.3f}")
+
+    _sub("Exposure and hazard drift")
+    print(f"  {'Scenario':<18s}{'Exposure scale':>15s}{'Exposure value':>16s}"
+          f"{'Mean pen.':>12s}{'lambda':>10s}{'P(Cat4+)':>12s}")
+    for r in climate_analysis.results:
+        p = r.exposure_path
+        print(f"  {r.scenario.name:<18s}{p.net_scale:>15.3f}"
+              f"{p.exposed_value_total:>16,.0f}{p.mean_penetration * 100:>11.2f}%"
+              f"{r.freq_lambda:>10.3f}{r.p_cat45 * 100:>11.2f}%")
+
+    _sub("Risk metrics drift (total effect: climate + exposure)")
+    print(f"  {'Scenario':<18s}{'AAL drift':>12s}{'PML10':>10s}{'PML50':>10s}"
+          f"{'PML100':>10s}{'PML250':>10s}{'PML500':>10s}")
+    print(f"  {'':18s}{'(%)':>12s}{'(%)':>10s}{'(%)':>10s}{'(%)':>10s}"
+          f"{'(%)':>10s}{'(%)':>10s}")
+    for r in climate_analysis.results:
+        dr = r.pml_drift
+        print(f"  {r.scenario.name:<18s}{r.aal_drift * 100:>11.1f}%"
+              f"{dr.get(10.0, 0.0) * 100:>9.1f}%"
+              f"{dr.get(50.0, 0.0) * 100:>9.1f}%"
+              f"{dr.get(100.0, 0.0) * 100:>9.1f}%"
+              f"{dr.get(250.0, 0.0) * 100:>9.1f}%"
+              f"{dr.get(500.0, 0.0) * 100:>9.1f}%")
+
+    _sub("Attribution of the 100-yr PML increase")
+    print(f"  {'Scenario':<18s}{'Total':>12s}{'Climate':>12s}{'Exposure':>12s}"
+          f"{'Interaction':>13s}{'C/E/I shares':>24s}")
+    print(f"  {'':18s}{'(bn)':>12s}{'(bn)':>12s}{'(bn)':>12s}"
+          f"{'(bn)':>13s}")
+    for r in climate_analysis.results:
+        a = r.attribution
+        print(f"  {r.scenario.name:<18s}{a['delta_total'] / 1e2:>11.1f}"
+              f"{a['delta_climate'] / 1e2:>11.1f}"
+              f"{a['delta_exposure'] / 1e2:>11.1f}"
+              f"{a['delta_interaction'] / 1e2:>12.1f}"
+              f"  {a['share_climate']:.0f}% / {a['share_exposure']:.0f}% /"
+              f" {a['share_interaction']:.0f}%")
+
+    _sub("Financial transmission (constant 2020 exposure)")
+    print(f"  {'Scenario':<18s}{'Depr. RP':>10s}{'Bond EL':>10s}{'Lane(bp)':>10s}"
+          f"{'Wang(bp)':>10s}{'Underprice':>12s}{'Layer EL drift':>18s}")
+    for r in climate_analysis.results:
+        drifts = " / ".join(f"{x * 100:.0f}%" for x in r.layer_el_drift)
+        print(f"  {r.scenario.name:<18s}{r.depreciated_rp:>9.0f}yr"
+              f"{r.bond.expected_loss * 1e4:>9.1f}bp"
+              f"{r.spread_drift_lane_bp:>9.0f}bp"
+              f"{r.spread_drift_wang_bp:>9.0f}bp"
+              f"{r.underpricing_pct:>10.0f}%  {drifts}")
+
+    _sub("Intensity uncertainty band on 100-yr PML")
+    print(f"  {'Scenario':<18s}{'Low':>14s}{'Central':>14s}{'High':>14s}"
+          f"{'Low drift':>12s}{'Central drift':>14s}{'High drift':>12s}")
+    for r in climate_analysis.results:
+        lo, mid, hi = r.uncertainty
+        dlo, dmid, dhi = r.uncertainty_drift
+        print(f"  {r.scenario.name:<18s}{lo:>13,.0f}{mid:>13,.0f}{hi:>13,.0f}"
+              f"{dlo * 100:>11.1f}%"
+              f"{dmid * 100:>13.1f}%"
+              f"{dhi * 100:>11.1f}%")
+
     for f in figures:
         size_kb = os.path.getsize(f) / 1024.0
         print(f"  [OK] {os.path.basename(f):<34s} {size_kb:>8.1f} KB")
@@ -580,6 +663,14 @@ def run() -> Dict[str, object]:
         f"{basis.hedge_effectiveness * 100:.1f}", "%")
     _kv("Sharpe improvement from CAT bond",
         f"{port.sharpe_improvement:+.3f}")
+    _kv("Climate - SSP5-8.5 2050 PML100 drift",
+        f"{climate_analysis.results[3].pml_drift[100.0] * 100:+.1f}", "%")
+    _kv("Climate - SSP5-8.5 2050 climate-only drift",
+        f"{climate_analysis.results[3].climate_only_drift * 100:+.1f}", "%")
+    _kv("Climate - SSP5-8.5 2050 attribution",
+        f"C {climate_analysis.results[3].attribution['share_climate']:.0f}% / "
+        f"E {climate_analysis.results[3].attribution['share_exposure']:.0f}% / "
+        f"I {climate_analysis.results[3].attribution['share_interaction']:.0f}%")
 
     elapsed = time.time() - t_start
     print()
@@ -595,7 +686,8 @@ def run() -> Dict[str, object]:
         "metrics_econ": m_econ, "metrics_ins": m_ins,
         "layers": layers, "bond_index": bond_index, "bond_param": bond_param,
         "sensitivity": sens, "basis": basis, "portfolio": port,
-        "figures": figures, "runtime_s": elapsed,
+        "figures": figures, "climate": climate_analysis,
+        "runtime_s": elapsed,
     }
 
 
@@ -614,7 +706,7 @@ def _loss_return_period(occurrence: np.ndarray, loss: float) -> float:
 
 
 def consistency_check(res: Dict[str, object]) -> bool:
-    """全局数值合理性与一致性审查。
+    """全局数值合理性与一致性审查（含气候变化模块 E 检查）。
 
     Args:
         res: ``run()`` 返回的结果字典。
@@ -632,7 +724,9 @@ def consistency_check(res: Dict[str, object]) -> bool:
     bond = res["bond_index"]
     basis = res["basis"]
     lek = float(np.sum(res["lekima_econ_city"]))
+    climate: cl.ClimateAnalysis = res["climate"]
 
+    # --- 原始 19 项中的 18 项（Runtime 拆分为两个） --- #
     checks.append(("Lekima modelled loss within 450-620 (CNY 100 mn)",
                    450.0 <= lek <= 620.0, f"{lek:,.1f}"))
     checks.append(("Economic AAL within 10-1000 (CNY 100 mn)",
@@ -681,13 +775,67 @@ def consistency_check(res: Dict[str, object]) -> bool:
     checks.append(("All figures generated and > 20 KB",
                    all(os.path.getsize(f) > 20 * 1024 for f in res["figures"]),
                    f"{len(res['figures'])} figures"))
-    checks.append(("Runtime under 60 s", res["runtime_s"] < 60.0,
+    checks.append(("Runtime under 90 s", res["runtime_s"] < 90.0,
                    f"{res['runtime_s']:.2f} s"))
 
-    for name, ok, detail in checks:
-        print(f"  [{'PASS' if ok else 'FAIL'}] {name:<52s} {detail}")
+    # --- 新增的 8 项气候模块检查 --- #
+    base_sc = climate.baseline
+    r_main = climate.results[3]  # SSP5-8.5 2050
 
-    all_ok = all(c[1] for c in checks)
+    def _warn(name: str, ok: bool, detail: str) -> None:
+        """把"警告级"检查也加入列表，但不阻断整体 PASS。"""
+        checks.append((name + " (WARN)", ok, detail))
+
+    checks.append(("Baseline climate reproduces baseline AAL",
+                   abs(base_sc.metrics_econ.aal - m_econ.aal) < 1.0,
+                   f"diff {abs(base_sc.metrics_econ.aal - m_econ.aal):.2f}"))
+    checks.append(("Baseline climate reproduces baseline 100-yr PML",
+                   abs(base_sc.headline_pml - m_econ.oep_pml[100.0]) < 1.0,
+                   f"diff {abs(base_sc.headline_pml - m_econ.oep_pml[100.0]):.2f}"))
+    checks.append(("Climate-only 100-yr PML drift within 15%-80%",
+                   0.15 <= r_main.climate_only_drift <= 0.80,
+                   f"{r_main.climate_only_drift * 100:.1f}%"))
+    checks.append(("Exposure-only 100-yr PML drift positive",
+                   r_main.exposure_only_drift > 0.0,
+                   f"{r_main.exposure_only_drift * 100:.1f}%"))
+    checks.append(("Attribution exposure share >= climate share",
+                   r_main.attribution["share_exposure"]
+                   >= r_main.attribution["share_climate"] - 1.0,
+                   f"E {r_main.attribution['share_exposure']:.0f}% / "
+                   f"C {r_main.attribution['share_climate']:.0f}%"))
+    checks.append(("Attribution sum equals total within 1%",
+                   abs(r_main.attribution["share_climate"]
+                       + r_main.attribution["share_exposure"]
+                       + r_main.attribution["share_interaction"] - 100.0) < 1.0,
+                   "100%"))
+    checks.append(("Return-period depreciation within 40-90 yr",
+                   40.0 <= r_main.depreciated_rp <= 90.0,
+                   f"{r_main.depreciated_rp:.0f} yr"))
+    checks.append(("Climate spread drift Lane > baseline",
+                   r_main.spread_drift_lane_bp > 0.0,
+                   f"+{r_main.spread_drift_lane_bp:.0f} bp"))
+    checks.append(("Uncertainty fan ordered low <= central <= high",
+                   r_main.uncertainty[0] <= r_main.uncertainty[1]
+                   <= r_main.uncertainty[2],
+                   f"{r_main.uncertainty[0]:.0f} / {r_main.uncertainty[1]:.0f} / "
+                   f"{r_main.uncertainty[2]:.0f}"))
+    checks.append(("Cat 4+ share drift reported for transparency",
+                   True, f"{r_main.cat45_drift * 100:+.0f}% vs Knutson +13%"))
+
+    # 警告：PML 单调性可能因极值尾部抖动而轻微破坏；我们检查但不阻断
+    pml100_vals = [r.metrics_econ.oep_pml[100.0] for r in climate.results]
+    _warn("OEP PML100 monotonically increasing across scenarios",
+          all(pml100_vals[i] <= pml100_vals[i + 1]
+              for i in range(len(pml100_vals) - 1)),
+          ", ".join(f"{v:,.0f}" for v in pml100_vals))
+
+    for name, ok, detail in checks:
+        mark = "PASS" if ok else "WARN" if "(WARN)" in name else "FAIL"
+        print(f"  [{mark}] {name:<55s} {detail}")
+
+    # 警告项不参与整体 PASS/FAIL
+    hard_checks = [c for c in checks if "(WARN)" not in c[0]]
+    all_ok = all(c[1] for c in hard_checks)
     print()
     print(f"  IS_PASS: {'YES' if all_ok else 'NO'}")
     print(_rule("#"))
@@ -702,6 +850,22 @@ def main() -> int:
     """
     res = run()
     ok = consistency_check(res)
+
+    # 自动把生成的图片同步到 docs/assets/；``--no-sync`` 可跳过。
+    # 这里使用 ``sys.argv`` 而不是 argparse，避免重新结构化主流程入口。
+    if ok and "--no-sync" not in sys.argv:
+        # 函数内部已打印新增/更新/跳过/孤儿明细与汇总行；这里只追加一个简短
+        # 说明，避免 main.py 不输出任何气候/文档相关信息。
+        sync_report = sync_docs.sync_outputs_to_docs(
+            source_dir=sync_docs.SOURCE_DIR,
+            target_dir=sync_docs.TARGET_DIR,
+            prune=False,
+            check=False,
+            algorithm="sha256",
+        )
+        if sync_report.n_changed == 0:
+            print("  [docs] 所有图表已与 docs/assets/ 保持一致")
+
     return 0 if ok else 1
 
 

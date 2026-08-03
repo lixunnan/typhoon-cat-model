@@ -252,6 +252,60 @@ class FinancialConfig:
 
 
 @dataclass(frozen=True)
+class ClimateConfig:
+    """气候变化情景分析参数（模块 E）。
+
+    参数映射的科学依据见 ``climate.py`` 模块 docstring，核心来源为
+    IPCC AR6 WG1 Ch11 (2021) 与 Knutson et al. (2020, BAMS) 的热带气旋
+    归因共识评估。本配置只承载"情景之外"的经济与不确定性设定；
+    各情景自身的气候参数缩放因子定义在 ``climate.SCENARIOS`` 中。
+
+    Attributes:
+        base_year: 暴露数据库对应的基准年（暴露库为 2019 年 GDP 量级，
+            与 2020 年基准的差异远小于本模块的其它不确定性，故取 2020）。
+        capital_growth_baseline: 基准路径前段实际资本存量年均增长率。
+        capital_growth_conservative: 保守路径前段实际资本存量年均增长率。
+        capital_growth_late_baseline: 基准路径后段（超过 ``growth_switch_years``
+            之后）的年均增长率，反映成熟经济体增速收敛。
+        capital_growth_late_conservative: 保守路径后段年均增长率。
+        growth_switch_years: 增长率切换的年限（自 ``base_year`` 起算）。
+        resilience_rate: 建筑规范强化 / 防灾能力提升带来的年均脆弱性下降率。
+            这是 Pielke (2007) normalization 争论中"暴露增长必须扣除
+            承灾能力改善"的量化体现。取 0.6%/yr：显著低于发达经济体
+            抗灾投资高峰期的经验值，反映华东存量建筑更新周期较长。
+        resilience_floor: 脆弱性下降的饱和下限（不可能无限降低）。
+        penetration_target: 财产险渗透率的长期收敛目标。
+        penetration_tau_years: 渗透率向目标收敛的指数时间常数 (年)。
+        intensity_low_multiplier: 强度信号不确定性下界乘子。Knutson et al.
+            (2020) 给出 2°C 下 TC 最大风速 +1%~+10%、中值 +5%，
+            故下界 = 1/5 = 0.2 倍中值异常。
+        intensity_high_multiplier: 强度信号不确定性上界乘子 = 10/5 = 2.0。
+        n_events: 气候情景重跑事件集的事件数。默认与基准一致，
+            性能不足时可下调至 5000。
+        headline_return_period: 报告中作为"重现期贬值"锚点的重现期 (年)。
+        catbond_attach_rp: 气候情景 CAT bond 的起赔点重现期 (年)。
+        catbond_exhaust_rp: 气候情景 CAT bond 的耗尽点重现期 (年)。
+    """
+
+    base_year: int = 2020
+    capital_growth_baseline: float = 0.035
+    capital_growth_conservative: float = 0.025
+    capital_growth_late_baseline: float = 0.015
+    capital_growth_late_conservative: float = 0.010
+    growth_switch_years: int = 30
+    resilience_rate: float = 0.006
+    resilience_floor: float = 0.50
+    penetration_target: float = 0.025
+    penetration_tau_years: float = 40.0
+    intensity_low_multiplier: float = 0.20
+    intensity_high_multiplier: float = 2.00
+    n_events: int = 10_000
+    headline_return_period: float = 100.0
+    catbond_attach_rp: float = 100.0
+    catbond_exhaust_rp: float = 500.0
+
+
+@dataclass(frozen=True)
 class PlotConfig:
     """绘图配置。
 
@@ -288,6 +342,7 @@ HAZARD = HazardConfig()
 STOCHASTIC = StochasticConfig()
 VULNERABILITY = VulnerabilityConfig()
 FINANCIAL = FinancialConfig()
+CLIMATE = ClimateConfig()
 PLOT = PlotConfig()
 
 # --------------------------------------------------------------------------- #
@@ -308,6 +363,6 @@ __all__ = [
     "PROJECT_ROOT", "OUTPUT_DIR", "AIR_DENSITY", "AMBIENT_PRESSURE",
     "OMEGA_EARTH", "EARTH_RADIUS_KM", "DEG2RAD", "HazardConfig",
     "StochasticConfig", "VulnerabilityConfig", "FinancialConfig",
-    "PlotConfig", "HAZARD", "STOCHASTIC", "VULNERABILITY", "FINANCIAL",
-    "PLOT", "COASTLINE",
+    "ClimateConfig", "PlotConfig", "HAZARD", "STOCHASTIC", "VULNERABILITY",
+    "FINANCIAL", "CLIMATE", "PLOT", "COASTLINE",
 ]

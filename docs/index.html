@@ -291,6 +291,7 @@ footer h4{color:#f1f5f9;font-size:14px;margin:0 0 14px;font-weight:650;
       <a href="#architecture">架构</a>
       <a href="#modules">模块详解</a>
       <a href="#gallery">图表画廊</a>
+      <a href="#climate">气候情景</a>
       <a href="#results">核心结论</a>
       <a href="#limitations">局限性</a>
       <a href="#run">如何运行</a>
@@ -379,6 +380,16 @@ footer h4{color:#f1f5f9;font-size:14px;margin:0 0 14px;font-weight:650;
         <div class="label">组合夏普比率改善<br>Sharpe improvement</div>
         <div class="value">+0.342</div>
         <div class="note">引入零贝塔 CAT bond 后的分散化价值</div>
+      </div>
+      <div class="metric m-amber">
+        <div class="label">SSP5-8.5 2050 百年 PML 总漂移<br>Total PML drift</div>
+        <div class="value">+161.5<span class="unit">%</span></div>
+        <div class="note">气候-only +48.4% / 暴露-only +76.7% / 交互 23%</div>
+      </div>
+      <div class="metric m-amber">
+        <div class="label">2020 百年一遇未来重现期<br>Return-period depreciation</div>
+        <div class="value">~47<span class="unit">年</span></div>
+        <div class="note">恒定 2020 暴露口径；CAT bond Lane spread 漂移 +217 bp</div>
       </div>
     </div>
   </div>
@@ -832,6 +843,68 @@ footer h4{color:#f1f5f9;font-size:14px;margin:0 0 14px;font-weight:650;
         </figure>
       </div>
     </div>
+
+    <!-- Climate -->
+    <div class="gal-group">
+      <div class="gal-title"><h3>Climate Scenarios · 气候变化情景</h3><span class="cnt">fig12</span></div>
+      <div class="gal-grid">
+        <figure class="fig" id="fig12">
+          <div class="fig-img"><img src="assets/fig12_climate_scenarios.png" alt="fig12 气候变化情景分析" loading="lazy"
+            data-cap="fig12 · 气候变化情景分析 Climate change scenario analysis"></div>
+          <figcaption class="fig-cap">
+            <span class="fid">FIG 12 · Climate Scenarios</span>
+            <h4>气候变化情景分析</h4>
+            <p>基于 IPCC AR6 WG1 Ch11 与 Knutson et al. (2020) 的 5 个 SSP 情景：EP 曲线族、PML 漂移、归因分解、百年一遇重现期贬值、CAT bond 利差漂移与强度信号不确定性带。</p>
+            <span class="read"><b>怎么读：</b>到 2050 年，SSP5-8.5 路径下「今天 100 年一遇的经济损失」在恒定暴露口径下约变成 <strong>47 年一遇</strong>；归因上暴露增长仍是主因（约 47%），气候信号约占 30%，二者交互不可忽略（约 23%）。</span>
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CLIMATE ============ -->
+<section id="climate" class="sec-alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-num">05 / Climate</span>
+      <h2>气候变化情景分析</h2>
+      <div class="en">IPCC AR6 WG1 Ch11 / Knutson et al. (2020) scenario scaling</div>
+      <p>模块 <code>climate.py</code> 在既有四模块之上叠加气候情景引擎，用共同随机数扰动保持事件几何不变、仅变换强度维度，使情景对比更干净。</p>
+    </div>
+
+    <div class="callout co-insight">
+      <strong>核心发现：</strong>在 SSP5-8.5 2050 情景下，百年一遇经济损失的总漂移为 <strong>+161.5%</strong>；其中恒定 2020 暴露口径的纯气候信号为 <strong>+48.4%</strong>，暴露增长贡献 <strong>+76.7%</strong>，气候与暴露的交互项约占 23%。这说明：损失上升不能简单归因于"气候变暖"或"沿海财富堆积"中的任何一方，而是两者的非线性叠加。
+    </div>
+
+    <h3>情景缩放表</h3>
+    <table class="styled">
+      <thead>
+        <tr><th>情景</th><th>年份</th><th>升温 °C</th><th>Δp 中位数</th><th>Δp σ</th><th>λ 频率</th><th>降水 β</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Baseline 2020</td><td>2020</td><td>1.1</td><td>×1.00</td><td>×1.00</td><td>×1.00</td><td>×1.00</td></tr>
+        <tr><td>SSP1-2.6 2050</td><td>2050</td><td>1.6</td><td>×1.04</td><td>×1.02</td><td>×0.96</td><td>×1.05</td></tr>
+        <tr><td>SSP2-4.5 2050</td><td>2050</td><td>2.0</td><td>×1.07</td><td>×1.04</td><td>×0.94</td><td>×1.09</td></tr>
+        <tr><td>SSP5-8.5 2050</td><td>2050</td><td>2.4</td><td>×1.10</td><td>×1.06</td><td>×0.92</td><td>×1.13</td></tr>
+        <tr><td>SSP5-8.5 2100</td><td>2100</td><td>4.4</td><td>×1.22</td><td>×1.12</td><td>×0.86</td><td>×1.28</td></tr>
+      </tbody>
+    </table>
+
+    <h3>金融传导（恒定 2020 暴露口径）</h3>
+    <div class="cols-2" style="margin-top:18px;">
+      <div>
+        <p>再保险与 CAT bond 的利差漂移不宜混入暴露增长——因为合约期限（1~3 年）远短于暴露增长周期，续转时会通过重新定价自动吸收。真正需要"今天定价进去"的是气候信号。</p>
+        <ul>
+          <li>2020 年百年一遇损失，在 SSP5-8.5 2050 下约贬值为 <strong>47 年一遇</strong>。</li>
+          <li>按 2020 结构重估的 CAT bond Lane 利差需上移 <strong>+217 bp</strong>。</li>
+          <li>再保险三层期望损失率分别漂移 +44% / +73% / +107%。</li>
+        </ul>
+      </div>
+      <div class="callout co-warn">
+        <strong>重要提示：</strong>本模块使用截断对数正态强度分布，尾薄于真实潜在强度约束；Δp 中位数上移已使 Cat 4+ 事件占比漂移约 <strong>+134%</strong>，远高于 Knutson et al. (2020) 的 +13%。因此情景尾部应作为<strong>气候压力测试</strong>而非中性预测使用。
+      </div>
+    </div>
   </div>
 </section>
 
@@ -839,7 +912,7 @@ footer h4{color:#f1f5f9;font-size:14px;margin:0 0 14px;font-weight:650;
 <section id="results">
   <div class="wrap">
     <div class="sec-head">
-      <span class="sec-num">05 / Results</span>
+      <span class="sec-num">06 / Results</span>
       <h2>核心结论</h2>
       <div class="en">Key takeaways and their interpretation</div>
       <p>下表为一次完整运行（种子 20190810）的核心输出。金额单位人民币亿元。</p>
@@ -900,7 +973,7 @@ footer h4{color:#f1f5f9;font-size:14px;margin:0 0 14px;font-weight:650;
 <section id="limitations" class="sec-alt">
   <div class="wrap">
     <div class="sec-head">
-      <span class="sec-num">06 / Limitations</span>
+      <span class="sec-num">07 / Limitations</span>
       <h2>局限性声明</h2>
       <div class="en">Scope, assumptions and misuse warnings</div>
       <p>请在引用任何数字之前先读完本节。本项目定位为<strong>可运行的方法学教学与工程骨架</strong>，不是生产级精算模型。</p>
@@ -940,6 +1013,7 @@ footer h4{color:#f1f5f9;font-size:14px;margin:0 0 14px;font-weight:650;
         <li><strong>暴露—损失聚合层级偏粗</strong>：城市级点暴露 + 逐点最大风速近似，未做网格化微地形暴露分布。</li>
         <li><strong>金融模块为方法论演示</strong>：再保分层/资本/CAT bond 参数（k、e、γ、α、β、λ）均为行业经验取值，非特定公司精算假设；基差风险与投资组合为简化双/多资产演示。</li>
         <li><strong>单一 peril</strong>：仅建模台风风灾直接损失 + 次生内涝，未含风暴潮、独立洪涝模块或业务中断（BI）链条。</li>
+        <li><strong>气候变化为压力测试</strong>：模块 E 按 Knutson 2°C 锚点线性缩放，并在薄尾截断对数正态下产生偏激进的强台风尾部放大；情景数字应作为压力测试而非费率预测使用。未包含海平面上升、风暴潮淹没与 Kossin (2018) 移速减慢等二次效应。</li>
       </ol>
     </div>
   </div>
@@ -964,17 +1038,20 @@ footer h4{color:#f1f5f9;font-size:14px;margin:0 0 14px;font-weight:650;
 <span class="p">$</span> <span class="k">pip</span> install -r requirements.txt
 <span class="c">#   numpy&gt;=1.24  pandas&gt;=1.5  scipy&gt;=1.10  matplotlib&gt;=3.6</span>
 
-<span class="c"># 3. 运行主流程：11 张图写入 outputs/，终端打印 Executive Summary</span>
+<span class="c"># 3. 运行主流程：12 张图写入 outputs/，终端打印 Executive Summary</span>
 <span class="p">$</span> <span class="k">python</span> main.py
 
-<span class="c"># 4. 运行 19 项独立校验</span>
-<span class="p">$</span> <span class="k">python</span> -m pytest tests/test_validation.py -v</pre>
+<span class="c"># 4. 单独同步图片到 docs/assets/</span>
+<span class="p">$</span> <span class="k">python</span> sync_docs.py
+
+<span class="c"># 5. 运行 19 项独立校验</span>
+<span class="p">$</span> <span class="k">python</span> tests/test_validation.py</pre>
     </div>
 
     <div class="run-grid">
-      <div class="run-card"><div class="t">运行耗时</div><p class="d">全量流水线实测约 <strong>3 秒</strong>（含 10,000 场事件模拟与 11 张 300 dpi 图渲染），远低于 60 秒目标。</p></div>
+      <div class="run-card"><div class="t">运行耗时</div><p class="d">全量流水线实测约 <strong>5 秒</strong>（含 10,000 场事件模拟、5 个气候情景与 12 张 300 dpi 图渲染），远低于 90 秒目标。</p></div>
       <div class="run-card"><div class="t">依赖约束</div><p class="d">仅 numpy / pandas / scipy / matplotlib 四个第三方库 + Python 标准库，无 cartopy、无 seaborn、无 GIS 依赖。</p></div>
-      <div class="run-card"><div class="t">可复现性</div><p class="d">随机种子固定 <code>20190810</code>；<code>main.py</code> 结尾执行全局一致性审查并打印 <code>IS_PASS: YES/NO</code>。</p></div>
+      <div class="run-card"><div class="t">可复现性</div><p class="d">随机种子固定 <code>20190810</code>；<code>main.py</code> 结尾执行全局一致性审查并打印 <code>IS_PASS: YES/NO</code>，随后自动同步图片到 <code>docs/assets/</code>。</p></div>
       <div class="run-card"><div class="t">测试覆盖</div><p class="d"><code>tests/test_validation.py</code> 含 <strong>19 项</strong>独立校验，覆盖风场物理量、曲线单调性、EP 曲线一致性与定价边界条件。</p></div>
     </div>
   </div>
@@ -1001,6 +1078,10 @@ footer h4{color:#f1f5f9;font-size:14px;margin:0 0 14px;font-weight:650;
           <li><em>Lane, M. N. (2000).</em> Pricing risk transfer transactions. <em>ASTIN Bulletin</em>, 30(2), 259–293.</li>
           <li><em>Wang, S. S. (2000).</em> A class of distortion operators for pricing financial and insurance risks. <em>Journal of Risk and Insurance</em>, 67(1), 15–36.</li>
           <li><em>Vickery, P. J., Skerlj, P. F., Steckley, A. C., &amp; Twisdale, L. A. (2000).</em> Hurricane wind field model for use in hurricane simulations. <em>Journal of Structural Engineering</em>, 126(10), 1203–1221.</li>
+          <li><em>IPCC (2021).</em> Climate Change 2021: The Physical Science Basis. WG1 AR6, Chapter 11.</li>
+          <li><em>Knutson, T. R. et al. (2020).</em> Tropical Cyclones and Climate Change Assessment: Part II. <em>Bulletin of the American Meteorological Society</em>, 101(3), E303–E322.</li>
+          <li><em>Kossin, J. P. et al. (2018).</em> A global slowdown of tropical-cyclone translation speed. <em>Nature</em>, 558, 104–107.</li>
+          <li><em>Pielke, R. A. Jr. (2007).</em> Future economic damage from tropical cyclones. <em>Philosophical Transactions of the Royal Society A</em>, 365, 2717–2729.</li>
         </ul>
       </div>
     </div>

@@ -34,13 +34,15 @@ suite of risk-financing metrics used by (re)insurers and cat-bond investors.
 
 ```
 typhoon_cat_model/
-├── config.py            # 全局参数（dataclass）：Hazard / Stochastic / Vulnerability / Financial / Plot
+├── config.py            # 全局参数（dataclass）：Hazard / Stochastic / Vulnerability / Financial / Climate / Plot
 ├── hazard.py            # 模块A 灾害：利奇马真实路径、Holland 1980 风场、登陆衰减、10000 场随机事件集
 ├── exposure.py          # 模块B 暴露：14 个华东沿海地市示例暴露数据库
 ├── vulnerability.py     # 模块C 脆弱性：Emanuel 2011 复合曲线 + 对数正态、内涝/需求激增因子、利奇马校准
 ├── financial.py         # 模块D 金融：EP/OEP/AEP、AAL/VaR/TVaR、C-ROSS 资本、超赔分层、CAT bond、基差风险、投资组合
-├── visualization.py     # 11 张 300dpi 英文图表
+├── climate.py           # 模块E 气候：5 个 SSP 情景、归因分解、共同随机数事件集扰动、金融传导、不确定性带
+├── visualization.py     # 12 张 300dpi 英文图表
 ├── main.py              # 主流程编排 + 全局一致性审查（IS_PASS）
+├── sync_docs.py         # outputs/*.png → docs/assets/ 增量同步（哈希去重；--prune / --check）
 ├── requirements.txt     # 依赖清单（仅 numpy/pandas/scipy/matplotlib）
 ├── README.md            # 本文档
 └── outputs/
@@ -54,7 +56,8 @@ typhoon_cat_model/
     ├── fig08_catbond_pricing.png
     ├── fig09_basis_risk.png
     ├── fig10_portfolio_frontier.png
-    └── fig11_event_set.png
+    ├── fig11_event_set.png
+    └── fig12_climate_scenarios.png
 ```
 
 ---
@@ -185,6 +188,71 @@ typhoon_cat_model/
 
 ---
 
+## X. 气候变化情景分析 / Climate Change Scenarios
+
+新增模块 `climate.py` 对台风巨灾模型叠加了 IPCC AR6 WG1 Ch11 / Knutson et al. (2020) 的
+气候缩放假设，并显式分离**气候信号**与**暴露增长**以回应 Pielke (2007) 的 normalization
+争论。
+
+### X.1 情景设计
+
+| 情景 | 年份 | 升温 (°C) | Δp 中位数 | Δp sigma | λ 频率 | 降水 β | 说明 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Baseline 2020 | 2020 | 1.1 | ×1.00 | ×1.00 | ×1.00 | ×1.00 | 当前气候/当前暴露，用于对照 |
+| SSP1-2.6 2050 | 2050 | 1.6 | ×1.04 | ×1.02 | ×0.96 | ×1.05 | 强减排路径，近 1.5°C 目标上沿 |
+| SSP2-4.5 2050 | 2050 | 2.0 | ×1.07 | ×1.04 | ×0.94 | ×1.09 | 中间路径，行业主用情景 |
+| SSP5-8.5 2050 | 2050 | 2.4 | ×1.10 | ×1.06 | ×0.92 | ×1.13 | 高排放路径，偿付能力压力测试 |
+| SSP5-8.5 2100 | 2100 | 4.4 | ×1.22 | ×1.12 | ×0.86 | ×1.28 | 世纪末长尾外推，方向性参考 |
+
+> 科学依据：2°C 升温下最大风速 +5%（区间 +1%~+10%）⇒ Δp ×1.10；Cat 4-5 占比 +13% ⇒
+> σ 上移；降水 +14% ⇒ `flood_beta` 同比例放大；总频数 −14% ⇒ λ 下调。各情景由 2°C
+> 锚点按额外升温线性内插，并在 `climate.SCENARIOS` 中显式声明。
+
+### X.2 暴露与承灾能力路径
+
+- **资本增长**：前 30 年 2.5%/年，之后 1.0%/年，避免 2100 年出现不可信的 ×15.7。
+- **承灾能力改善**：以 0.6%/年降低脆弱性，饱和下限 0.50；体现 Pielke normalization
+  中"暴露增长必须扣除防灾能力提升"的观点。
+- **保险渗透率**：向 2.5% 长期目标指数收敛，使保险损失增速高于经济损失。
+
+### X.3 主要数值结论（来自 `main.py` 最新运行）
+
+| 指标 | 数值 | 解读 |
+|---|---|---|
+| SSP5-8.5 2050 总 PML100 漂移 | +161.5% | 气候+暴露+交互共同作用 |
+| 其中**气候-only**漂移 | +48.4% | 恒定 2020 暴露，仅气候信号 |
+| 其中**暴露-only**漂移 | +76.7% | 恒定 2020 气候，仅暴露增长 |
+| 归因分解（C/E/I） | 30% / 47% / 23% | 暴露仍是主因，气候贡献显著 |
+| 2020 百年一遇损失在未来重现期 | ≈47 年 | 恒定暴露口径；即百年损失贬值约一半 |
+| CAT bond Lane 利差漂移 | +217 bp | 按 2020 结构重估的公允利差缺口 |
+| 不确定性带（强度信号） | +92%~+252% | Knutson 低/高边界对 PML100 的影响 |
+
+> 模型在情景间使用**共同随机数扰动 (common-random-number perturbation)**，保持登陆点、
+> 移动方向、移速不变，仅对强度维度做单调变换，显著降低蒙特卡洛噪声，使情景对比更干净。
+
+### X.4 模型局限（气候模块）
+
+- 缩放因子按 Knutson 2°C 锚点**线性内插**，真实 SST-TC 响应为非线性，2100 外推尤其
+  应视为方向性指示。
+- 本模型采用截断对数正态强度分布，尾薄于真实潜在强度约束；Δp 中位数上移已使
+  Cat 4+ 事件占比漂移约 +134%，远高于 Knutson 的 +13%。这意味着**情景对强台风尾部的
+  放大可能偏激进**，应作为气候压力测试而非中性预测使用。
+- 未包含海平面上升、风暴潮淹没、TC 移速减慢（Kossin 2018）等二次效应，沿海淹没损失
+  被系统性低估。
+- 暴露增长为确定性路径，未考虑政策突变、产业转移或保险市场冲击。
+
+### X.5 关键参考文献 / Key References
+
+- IPCC, 2021: *Climate Change 2021: The Physical Science Basis*, WG1 AR6, Chapter 11.
+- Knutson, T. et al., 2020: Tropical Cyclones and Climate Change Assessment: Part II.
+  *Bull. Amer. Meteor. Soc.*, 101(3), E303-E322.
+- Kossin, J. P. et al., 2018: A global slowdown of tropical-cyclone translation speed.
+  *Nature*, 558, 104-107.
+- Pielke, R. A. Jr., 2007: Future economic damage from tropical cyclones.
+  *Phil. Trans. R. Soc. A*, 365, 2717-2729.
+
+---
+
 ## 6. 运行方式 / How to Run
 
 ```bash
@@ -197,8 +265,9 @@ cd typhoon-cat-model
 /Users/liqiqi/.workbuddy/binaries/python/envs/default/bin/python main.py
 ```
 
-- 运行后所有 11 张图写入 `outputs/`，终端打印 Executive Summary 与全局一致性审查，并以 `IS_PASS: YES/NO` 结尾。
-- 随机种子固定（`20190810`），结果可复现，全量运行 < 60 s（实测约 3 s）。
+- 运行后所有 **12** 张图写入 `outputs/`，终端打印 Executive Summary、气候情景汇总与全局一致性审查，并以 `IS_PASS: YES/NO` 结尾。
+- 随机种子固定（`20190810`），结果可复现，全量运行 < 90 s（实测约 5 s）。
+- 运行结束会自动执行 `sync_docs.py`，把变更的图表同步到 `docs/assets/`；可添加 `--no-sync` 跳过。
 
 ---
 
@@ -214,7 +283,9 @@ cd typhoon-cat-model
 5. **金融模块为方法论演示**：再保险分层/资本/CAT bond 参数（k、e、γ、α、β、λ）为行业经验取值，
    非特定公司精算假设；基差风险与投资组合为简化双/多资产演示。
 6. **单一 peril**：仅建模台风风灾直接损失 + 次生内涝，未含风暴潮、洪涝独立模块或业务中断链。
-7. **标定 V_half ≈ 176 m/s 不具备物理可解释性（关键防误用提示）**：为匹配利奇马
+7. **气候变化为压力测试而非预测**：模块 E 按 Knutson 2°C 锚点线性缩放，并在薄尾截断对数正态下
+   产生偏激进的强台风尾部放大；用于情景压力测试，不宜直接作为费率预测。
+8. **标定 V_half ≈ 176 m/s 不具备物理可解释性（关键防误用提示）**：为匹配利奇马
    537.2 亿元区域总损失，brentq 反演得到的 `v_half` 高达 ≈ 176 m/s，远高于
    Emanuel (2011) 在大西洋单栋建筑标定得到的 74.7 m/s。其本质是令复合脆弱性曲线在
    **"区域可暴露资本存量"** 这一损失分母口径上匹配总损失的**尺度参数**，而非单栋建筑的

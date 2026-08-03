@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import warnings
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 
 import matplotlib
 
@@ -33,6 +33,9 @@ from financial import (
 )
 from hazard import Track, lekima_landfall_indices
 from vulnerability import CalibrationResult, composite_emanuel_mdr, emanuel_mdr
+
+if TYPE_CHECKING:  # 仅类型检查期导入，运行期避免 climate <-> visualization 耦合
+    from climate import ClimateAnalysis
 
 # 仅精确屏蔽 matplotlib 字体缺失类 UserWarning（英文标签下仍可能偶发），
 # 以及 numpy 数值计算中可能触发的 RuntimeWarning（除零/无效值）。
@@ -1048,9 +1051,186 @@ def plot_event_set_overview(
     return _save(fig, "fig11_event_set.png", cfg)
 
 
+# --------------------------------------------------------------------------- #
+# Figure 12 — Climate change scenarios (module E)
+# --------------------------------------------------------------------------- #
+
+#: fig12 各情景配色（基准深蓝 -> 高排放紫红），与情景表顺序一一对应。
+_CLIMATE_COLORS: Tuple[str, ...] = (
+    "#12355B", "#3FA796", "#E9A03B", "#D1495B", "#7D53DE",
+)
+
+
+def plot_climate_scenarios(analysis: "ClimateAnalysis",
+                           cfg: PlotConfig = PLOT) -> str:
+    """绘制气候变化情景全景图（2x3 六联图，全英文标注）。
+
+    子图内容：
+        (a) 各情景 OEP 曲线族
+        (b) 各重现期 PML 漂移（分组柱状）
+        (c) PML100 变化的归因分解（堆叠柱状：气候/暴露/交互）
+        (d) 重现期贬值：2020 年的 100 年一遇在未来变成几年一遇
+        (e) CAT bond 利差漂移（Lane vs Wang，bp）
+        (f) 强度信号不确定性扇形带（Knutson +1%~+10%）
+
+    Args:
+        analysis: ``climate.run_climate_scenarios`` 的返回结果。
+        cfg: 绘图配置。
+
+    Returns:
+        str: 图片路径。
+    """
+    _init_style(cfg)
+    fig, axes = plt.subplots(2, 3, figsize=(19.2, 10.4))
+
+    results = list(analysis.results)
+    colors = [_CLIMATE_COLORS[i % len(_CLIMATE_COLORS)]
+              for i in range(len(results))]
+    labels = [r.scenario.label_en for r in results]
+    non_base = [r for r in results if not r.scenario.is_baseline]
+    nb_labels = [r.scenario.label_en for r in non_base]
+    nb_colors = colors[1:len(non_base) + 1]
+    head_rp = analysis.headline_rp
+
+    # ---- (a) EP curve family ---- #
+    ax = axes[0, 0]
+    for r, c in zip(results, colors):
+        x, _, rp = ep_curve(r.occurrence_econ)
+        sel = rp >= 1.05
+        ax.plot(rp[sel], x[sel] / 1.0e4, lw=2.2, color=c,
+                label=r.scenario.label_en,
+                ls="-" if not r.scenario.is_baseline else "--")
+    ax.axvline(head_rp, color="#95A5A6", ls=":", lw=1.0)
+    ax.set_xscale("log")
+    ax.set_xlim(1.0, 1000.0)
+    ax.set_xlabel("Return period (years, log scale)")
+    ax.set_ylabel("OEP loss (CNY trillion)")
+    ax.set_title("(a) Occurrence EP curves by climate scenario")
+    ax.grid(True, which="both", ls=":", alpha=0.55)
+    ax.legend(loc="upper left", fontsize=8.2)
+
+    # ---- (b) PML drift by return period ---- #
+    ax = axes[0, 1]
+    rps = list(analysis.return_periods)
+    xpos = np.arange(len(rps), dtype=float)
+    width = 0.8 / max(len(non_base), 1)
+    for k, (r, c) in enumerate(zip(non_base, nb_colors)):
+        vals = [r.pml_drift.get(rp, 0.0) * 100.0 for rp in rps]
+        ax.bar(xpos + (k - (len(non_base) - 1) / 2.0) * width, vals,
+               width=width * 0.92, color=c, edgecolor="white", linewidth=0.6,
+               label=r.scenario.label_en)
+    ax.set_xticks(xpos)
+    ax.set_xticklabels([f"{int(rp)}-yr" for rp in rps])
+    ax.axhline(0.0, color="#5D6D7E", lw=1.0)
+    ax.set_xlabel("OEP return period")
+    ax.set_ylabel("PML change vs Baseline 2020 (%)")
+    ax.set_title("(b) PML drift, total effect (climate + exposure)")
+    ax.grid(True, axis="y", ls=":", alpha=0.55)
+    ax.legend(loc="upper right", fontsize=8.2)
+
+    # ---- (c) Attribution decomposition ---- #
+    ax = axes[0, 2]
+    xa = np.arange(len(non_base), dtype=float)
+    d_clim = np.array([r.attribution["delta_climate"] for r in non_base]) / 1.0e4
+    d_exp = np.array([r.attribution["delta_exposure"] for r in non_base]) / 1.0e4
+    d_int = np.array(
+        [r.attribution["delta_interaction"] for r in non_base]) / 1.0e4
+    ax.bar(xa, d_exp, width=0.56, color=cfg.palette[0],
+           edgecolor="white", linewidth=0.6, label="Exposure growth")
+    ax.bar(xa, d_clim, width=0.56, bottom=d_exp, color=cfg.palette[4],
+           edgecolor="white", linewidth=0.6, label="Climate signal")
+    ax.bar(xa, d_int, width=0.56, bottom=d_exp + d_clim, color=cfg.palette[3],
+           edgecolor="white", linewidth=0.6, label="Interaction")
+    for i, r in enumerate(non_base):
+        a = r.attribution
+        ax.text(xa[i], (d_exp[i] + d_clim[i] + d_int[i]) * 1.02,
+                f"C {a['share_climate']:.0f}% | E {a['share_exposure']:.0f}%"
+                f" | I {a['share_interaction']:.0f}%",
+                ha="center", va="bottom", fontsize=7.4, fontweight="bold",
+                color=cfg.text_color)
+    ax.set_xticks(xa)
+    ax.set_xticklabels(nb_labels, fontsize=8.2, rotation=12)
+    ax.set_ylabel(f"Increase in {int(head_rp)}-yr PML (CNY trillion)")
+    ax.set_title(f"(c) Attribution of the {int(head_rp)}-yr PML increase")
+    ax.grid(True, axis="y", ls=":", alpha=0.55)
+    ax.legend(loc="upper left", fontsize=8.2)
+    ax.set_ylim(0.0, float((d_exp + d_clim + d_int).max()) * 1.22)
+
+    # ---- (d) Return-period depreciation ---- #
+    ax = axes[1, 0]
+    dep = [min(r.depreciated_rp, head_rp * 3.0) for r in non_base]
+    bars = ax.bar(xa, dep, width=0.56, color=nb_colors,
+                  edgecolor="white", linewidth=0.6)
+    ax.axhline(head_rp, color=cfg.palette[0], ls="--", lw=1.6)
+    ax.text(len(non_base) - 0.5, head_rp * 1.03,
+            f"Baseline: {int(head_rp)}-yr event", ha="right", va="bottom",
+            fontsize=8.4, color=cfg.palette[0], fontweight="bold")
+    for b, r in zip(bars, non_base):
+        ax.text(b.get_x() + b.get_width() / 2.0, b.get_height() * 1.03,
+                f"{r.depreciated_rp:.0f} yr", ha="center", va="bottom",
+                fontsize=8.6, fontweight="bold", color=cfg.text_color)
+    ax.set_xticks(xa)
+    ax.set_xticklabels(nb_labels, fontsize=8.2, rotation=12)
+    ax.set_ylabel("New return period (years)")
+    ax.set_title(f"(d) Return-period depreciation of today's "
+                 f"{int(head_rp)}-yr loss")
+    ax.grid(True, axis="y", ls=":", alpha=0.55)
+    ax.set_ylim(0.0, head_rp * 1.28)
+
+    # ---- (e) CAT bond spread drift ---- #
+    ax = axes[1, 1]
+    lane = [r.spread_drift_lane_bp for r in non_base]
+    wang = [r.spread_drift_wang_bp for r in non_base]
+    ax.bar(xa - 0.19, lane, width=0.36, color=cfg.palette[0],
+           edgecolor="white", linewidth=0.6, label="Lane (2000) model")
+    ax.bar(xa + 0.19, wang, width=0.36, color=cfg.palette[2],
+           edgecolor="white", linewidth=0.6, label="Wang transform")
+    for i, v in enumerate(lane):
+        ax.text(xa[i] - 0.19, v * 1.03, f"+{v:.0f}", ha="center", va="bottom",
+                fontsize=8.0, fontweight="bold", color=cfg.palette[0])
+    ax.set_xticks(xa)
+    ax.set_xticklabels(nb_labels, fontsize=8.2, rotation=12)
+    ax.set_ylabel("Fair spread drift (bp)")
+    ax.set_title("(e) CAT bond spread drift, constant 2020 exposure")
+    ax.grid(True, axis="y", ls=":", alpha=0.55)
+    ax.legend(loc="upper left", fontsize=8.2)
+    ax.set_ylim(0.0, max(lane + wang) * 1.22)
+
+    # ---- (f) Intensity uncertainty fan ---- #
+    ax = axes[1, 2]
+    warm = np.array([r.scenario.warming_c for r in results], dtype=float)
+    lo = np.array([r.uncertainty[0] for r in results]) / 1.0e4
+    mid = np.array([r.uncertainty[1] for r in results]) / 1.0e4
+    hi = np.array([r.uncertainty[2] for r in results]) / 1.0e4
+    order = np.argsort(warm)
+    ax.fill_between(warm[order], lo[order], hi[order], color=cfg.palette[1],
+                    alpha=0.22, label="Knutson intensity range (+1% to +10%)")
+    ax.plot(warm[order], mid[order], lw=2.4, color=cfg.palette[0],
+            marker="o", ms=6, markeredgecolor="white",
+            label="Median intensity (+5%)")
+    ax.plot(warm[order], lo[order], lw=1.1, ls="--", color=cfg.palette[1])
+    ax.plot(warm[order], hi[order], lw=1.1, ls="--", color=cfg.palette[1])
+    for r, w, m in zip(results, warm, mid):
+        ax.annotate(r.scenario.label_en, xy=(w, m),
+                    xytext=(0, -16), textcoords="offset points",
+                    ha="center", fontsize=7.6, color=cfg.text_color)
+    ax.set_xlabel("Global warming above pre-industrial (deg C)")
+    ax.set_ylabel(f"{int(head_rp)}-yr OEP PML (CNY trillion)")
+    ax.set_title("(f) Uncertainty fan from the intensity signal")
+    ax.grid(True, ls=":", alpha=0.55)
+    ax.legend(loc="upper left", fontsize=8.2)
+
+    fig.suptitle(
+        "Fig.12  Climate Change Scenario Analysis "
+        "(IPCC AR6 WG1 Ch11 / Knutson et al. 2020 scaling)",
+        fontsize=13.5, fontweight="bold", y=1.005)
+    fig.tight_layout()
+    return _save(fig, "fig12_climate_scenarios.png", cfg)
+
+
 __all__ = [
     "plot_track", "plot_holland_profiles", "plot_wind_field",
     "plot_vulnerability", "plot_lekima_validation", "plot_ep_and_distribution",
     "plot_reinsurance_layers", "plot_catbond_pricing", "plot_basis_risk",
-    "plot_portfolio", "plot_event_set_overview",
+    "plot_portfolio", "plot_event_set_overview", "plot_climate_scenarios",
 ]
